@@ -1,11 +1,11 @@
+<?php
 /*
 Plugin Name: Image ALT Cannibalization PRO
 Description: Grouped ALT checker with pagination, history, featured/gallery detection, RankMath SEO keyword.
-Version: 5.1
+Version: 6.0
 */
 
-/* ---------- CREATE HISTORY TABLE AUTOMATICALLY ---------- */
-
+/* ---------- CREATE HISTORY TABLE ---------- */
 add_action('init', function () {
     global $wpdb;
     $table = $wpdb->prefix . 'alt_history';
@@ -28,9 +28,7 @@ add_action('init', function () {
     }
 });
 
-
 /* ---------- ADMIN MENU ---------- */
-
 add_action('admin_menu', function () {
     add_menu_page(
         'Image ALT PRO',
@@ -52,9 +50,7 @@ add_action('admin_menu', function () {
     );
 });
 
-
 /* ---------- SAVE ALT + HISTORY ---------- */
-
 add_action('admin_post_update_image_alt', function () {
 
     if (!current_user_can('manage_options')) {
@@ -90,11 +86,8 @@ add_action('admin_post_update_image_alt', function () {
     exit;
 });
 
-
 /* ---------- IMAGE TYPE ---------- */
-
 function get_image_usage_type($image_id, $parent_id) {
-
     if (get_post_thumbnail_id($parent_id) == $image_id) {
         return '<span style="color:green;font-weight:bold;">Featured</span>';
     }
@@ -110,23 +103,17 @@ function get_image_usage_type($image_id, $parent_id) {
     return 'Content';
 }
 
-
 /* ---------- RANKMATH PRIMARY KEYWORD ---------- */
-
 function get_rankmath_focus_keyword($post_id) {
     $keyword = get_post_meta($post_id, 'rank_math_focus_keyword', true);
-
     if ($keyword) {
         $keywords = explode(',', $keyword);
         return trim($keywords[0]);
     }
-
     return '-';
 }
 
-
 /* ---------- MAIN PAGE ---------- */
-
 function render_image_alt_pro() {
 
     global $wpdb;
@@ -138,13 +125,15 @@ function render_image_alt_pro() {
         echo '<div class="updated notice"><p>ALT Updated + History Saved.</p></div>';
     }
 
+    /* Pagination */
+    $per_page = 10;
+    $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+    $offset = ($current_page - 1) * $per_page;
+
     $images = $wpdb->get_results("
-        SELECT p.ID,
-               p.post_parent,
-               pm.meta_value AS alt_text
+        SELECT p.ID, p.post_parent, pm.meta_value AS alt_text
         FROM {$wpdb->posts} p
-        INNER JOIN {$wpdb->postmeta} pm
-            ON p.ID = pm.post_id
+        INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
         WHERE p.post_type = 'attachment'
         AND p.post_mime_type LIKE 'image/%'
         AND p.post_parent != 0
@@ -158,17 +147,20 @@ function render_image_alt_pro() {
         return;
     }
 
+    /* Group by ALT */
     $grouped = [];
-
     foreach ($images as $img) {
         $grouped[$img->alt_text][] = $img;
     }
 
+    /* Only duplicates */
     foreach ($grouped as $alt => $imgs) {
-        if (count($imgs) <= 1) {
-            unset($grouped[$alt]);
-        }
+        if (count($imgs) <= 1) unset($grouped[$alt]);
     }
+
+    $total_groups = count($grouped);
+    $total_pages  = ceil($total_groups / $per_page);
+    $grouped = array_slice($grouped, $offset, $per_page, true);
 
     foreach ($grouped as $alt => $imgs) {
 
@@ -182,7 +174,6 @@ function render_image_alt_pro() {
             $focus_keyword = get_rankmath_focus_keyword($parent->ID);
 
             echo '<div style="display:flex;gap:15px;margin-bottom:15px;align-items:center;">';
-
             echo '<img src="' . esc_url($image_url) . '" width="80">';
 
             echo '<div style="flex:1;">';
@@ -218,14 +209,21 @@ function render_image_alt_pro() {
         echo '</div>';
     }
 
+    /* Pagination Buttons */
+    if ($total_pages > 1) {
+        echo '<div style="margin-top:20px;">';
+        for ($i = 1; $i <= $total_pages; $i++) {
+            $class = ($i == $current_page) ? 'button button-primary' : 'button';
+            echo '<a class="' . $class . '" style="margin-right:5px;" href="' . admin_url('admin.php?page=image-alt-pro&paged=' . $i) . '">' . $i . '</a>';
+        }
+        echo '</div>';
+    }
+
     echo '</div>';
 }
 
-
 /* ---------- HISTORY PAGE ---------- */
-
 function render_alt_history_page() {
-
     global $wpdb;
 
     echo '<div class="wrap">';
